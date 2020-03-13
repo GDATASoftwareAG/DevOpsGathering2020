@@ -1,7 +1,9 @@
 # OpenTracing Prototype
 
 > Prototype according to presentation DevOpsGathering 2020 - "Tracing - a journey to the tactical insight"
+
 > author: Florian Kuckelkorn
+
 > email: Florian.Kuckelkorn ( at ) gdata.de
 
 ## Deployment
