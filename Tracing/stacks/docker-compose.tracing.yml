@@ -1,0 +1,171 @@
+version: '3.7'
+
+services:
+  zookeeper:
+    image: wurstmeister/zookeeper
+    networks:    
+      - default
+    ports:
+      - target: 2181
+        published: 2181
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - zookeeper_conf:/opt/zookeeper-3.4.13/conf
+      - zookeeper_storage:/opt/zookeeper-3.4.13/data
+    deploy:
+
+  kafka:
+    image: wurstmeister/kafka:2.12-2.3.0
+    ports:
+      - target: 9092
+        published: 9092
+        protocol: tcp
+        mode: ingress
+    networks:
+      - default
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ADVERTISED_PORT: 9092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      KAFKA_BROKER_ID: 0
+      KAFKA_LOG_RETENTION_MS: 3000000
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 10000
+      KAFKA_CREATE_TOPICS: "NEW_SAMPLE_RECEIVED:5:1,SAMPLE_CLASSIFIED:5:1,SAMPLE_RECEIVED:5:1,SANDBOX_RUN_COMPLETE:5:1,STATICAL_ANALYSIS_COMPLETE:5:1,traces:5:1,GeneralOutput:5:1"
+    volumes:
+      - kafka_storage:/kafka
+    deploy:
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.4.0
+    environment:
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+      - 9300:9300
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.4.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - 5601:5601
+
+  # This service ingests opentracing traces
+  jaeger-agent:
+    image: jaegertracing/jaeger-agent:1.16.0
+    environment:
+      COLLECTOR_HOST_PORT: jaeger-collector:14267
+    ports:
+      - "5775:5775/udp"
+    networks:
+      default:
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  jaeger-collector:
+    image: jaegertracing/jaeger-collector:1.16.0
+    environment:  
+      SPAN_STORAGE_TYPE: kafka,elasticsearch
+      KAFKA_PRODUCER_BROKERS: "kafka:9092"
+      KAFKA_PRODUCER_TOPIC: traces
+      KAFKA_PRODUCER_ENCODING: json
+      ES_SERVER_URLS: "http://elasticsearch:9200"
+      ES_NUM_SHARDS: 1
+      ES_NUM_REPLICAS: 0
+      LOG_LEVEL: debug
+    networks:
+      default:
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  jager-query:
+    image: jaegertracing/jaeger-query:1.16.0
+    environment:
+      SPAN_STORAGE_TYPE: elasticsearch
+      ES_SERVER_URLS: "http://elasticsearch:9200"
+      LOG_LEVEL: error
+    ports:
+      - 16686:16686
+      - 16687:16687
+    networks:
+      default:
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - default
+    # volumes:
+    #   - /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    configs:
+      - source: tracing-prometheus
+        target: /etc/prometheus/prometheus.yml
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  kafka_exporter:
+     image: danielqsj/kafka-exporter
+     ports:
+       - "9308:9308"
+     networks:
+       - default
+     command: --kafka.server=kafka:9092
+
+  dependencydb:
+    image: neo4j:3.5.14
+    environment:
+      NEO4J_AUTH: none
+    ports:
+      - 7474:7474
+      - 7687:7687
+    volumes:
+      - neo4j_storage:/data
+    networks:
+      - default
+
+  grafana:
+    image: grafana/grafana:latest
+    networks:
+     - default
+    ports:
+      - "3000:3000"
+    volumes:
+     - grafana_storage:/var/lib/grafana
+    deploy:
+      mode: replicated
+      replicas: 1
+
+configs:
+  tracing-prometheus:
+    external: true
+
+networks:
+  default:
+    external: true
+    name: tracing
+
+volumes:
+  kafka_storage:
+  zookeeper_conf:
+  zookeeper_storage:
+  elasticsearch-data:
+  grafana_storage:
+  neo4j_storage:

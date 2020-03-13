@@ -1,0 +1,79 @@
+---
+- hosts: swarm-manager
+  tasks:
+    - name: "Install python3 pip"
+      apt:
+        name: python3-pip
+        state: present
+
+    - name: "Install docker"
+      pip:
+        name:
+          - docker
+          - jsondiff
+          - requests>=2.20.1
+        state: present
+
+    - name: Init a new swarm with default parameters
+      docker_swarm:
+        state: present
+
+    - name: Creates tracing directory
+      file:
+        path: /data/
+        state: directory
+
+    - name: Synchronization of Docker context
+      synchronize:
+        src: Tracing
+        dest: /data/
+
+    - name: Build tracing image
+      docker_image:
+        build:
+          path: /data/Tracing/
+          pull: true
+        name: gdata_tracing
+        tag: latest
+        source: build
+        force_source: true
+
+    - name: Deploy ptl stack from a compose file
+      docker_stack:
+        state: present
+        name: ptl
+        compose:
+          - /data/Tracing/stacks/docker-compose.ptl.yml
+
+    - name: Create config tracing-prometheus
+      docker_config:
+        name: tracing-prometheus
+        data: "{{ lookup('file', './Tracing/stacks/configs/prometheus.yml') | b64encode }}"
+        data_is_b64: true
+        state: present
+
+    - name: Create a tracing network
+      docker_network:
+        name: tracing
+        driver: overlay
+
+    - name: Deploy tracing stack from a compose file
+      docker_stack:
+        state: present
+        name: tracing
+        compose:
+          - /data/Tracing/stacks/docker-compose.tracing.yml
+
+    - name: Deploy worker stack from a compose file
+      docker_stack:
+        state: present
+        name: worker
+        compose:
+          - /data/Tracing/stacks/docker-compose.worker.yml
+
+    - name: Deploy flink stack from a compose file
+      docker_stack:
+        state: present
+        name: flink
+        compose:
+          - /data/Tracing/stacks/docker-compose.flink.yml

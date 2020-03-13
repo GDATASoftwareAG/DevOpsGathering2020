@@ -1,0 +1,78 @@
+version: '3.7'
+
+services:
+  sample-publisher:
+    image: gdata_tracing:latest
+    networks:    
+      - default
+    environment:
+      PUBLISHER_RATE_GENERATOR: "CONST"
+      PUBLISHER_RATE: 60
+      KAFKA_HOST: "kafka:9092"
+    entrypoint: python3 ./Tracing/services/startWorkflow/publish.py
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  sample-workflow:
+    image: gdata_tracing:latest
+    networks:    
+      - default
+    environment:
+      KAFKA_HOST: "kafka:9092"
+    entrypoint: python3 ./Tracing/services/startWorkflow/main.py
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  sample-sandbox:
+    image: gdata_tracing:latest
+    networks:    
+      - default
+    environment:
+      KAFKA_HOST: "kafka:9092"
+    entrypoint: python3 ./Tracing/services/sandbox_analyser/main.py
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  sample-statical-analyser:
+    image: gdata_tracing:latest
+    networks:    
+      - default
+    environment:
+      KAFKA_HOST: "kafka:9092"
+    entrypoint: python3 ./Tracing/services/statical_analyser/main.py
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  sample-classification:
+    image: gdata_tracing:latest
+    networks:    
+      - default
+    environment:
+      KAFKA_HOST: "kafka:9092"
+    entrypoint: python3 ./Tracing/services/classification/main.py
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  sample-post-processor:
+    image: gdata_tracing:latest
+    networks:    
+      - default
+    # ports:
+    #   - "8089:8089"
+    environment:
+      KAFKA_HOST: "kafka:9092"
+      NEO4j: "http://dependencydb:7474"
+    entrypoint: python3 ./Tracing/services/post-processor/main.py
+    deploy:
+      mode: replicated
+      replicas: 1
+
+networks:
+  default:
+    external: true
+    name: tracing
